@@ -1,4 +1,3 @@
-
 using System;
 using System.IO;
 using System.Text;
@@ -12,7 +11,9 @@ public class MetaActionFeatureLogger : MonoBehaviour
     public string runLabel = "default";
     public float logInterval = 0.1f;
 
-    [Header("Goal")]
+    [Header("Goal / Progress")]
+    public bool useGoalAheadOfRobot = true;
+    public float goalDistanceAhead = 20.0f;
     public Transform goalTransform;
     public Vector3 fallbackGoalPosition = new Vector3(3.82f, 0.5f, -22.65f);
 
@@ -28,6 +29,10 @@ public class MetaActionFeatureLogger : MonoBehaviour
     private int collisionCount = 0;
     private bool currentlyInCollision = false;
 
+    private Vector3 startRobotPosition;
+    private Vector3 goalPosition;
+    private bool goalInitialized = false;
+
     private string outputPath;
     private StreamWriter writer;
 
@@ -41,6 +46,11 @@ public class MetaActionFeatureLogger : MonoBehaviour
         TryFindRobotBaseLink();
         FindPedestrians();
 
+        if (robotBaseLink != null)
+        {
+            InitializeGoal();
+        }
+
         string folder = Path.Combine(Application.dataPath, "../Output/MetaActionFeatures");
         Directory.CreateDirectory(folder);
 
@@ -50,7 +60,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
         writer = new StreamWriter(outputPath, false, Encoding.UTF8);
 
         writer.WriteLine(
-            "time,run_label,robot_x,robot_y,robot_z,goal_x,goal_y,goal_z,dist_to_goal,min_dist_to_ped_so_far,current_min_dist_to_ped,collision_count,num_pedestrians,pedestrian_positions"
+            "time,run_label,robot_x,robot_y,robot_z,goal_x,goal_y,goal_z,dist_to_goal,progress_along_goal_direction,min_dist_to_ped_so_far,current_min_dist_to_ped,collision_count,num_pedestrians,pedestrian_positions"
         );
 
         Debug.Log("MetaActionFeatureLogger writing to: " + outputPath);
@@ -70,6 +80,11 @@ public class MetaActionFeatureLogger : MonoBehaviour
             {
                 return;
             }
+        }
+
+        if (!goalInitialized)
+        {
+            InitializeGoal();
         }
 
         if (Time.time < nextLogTime)
@@ -97,11 +112,43 @@ public class MetaActionFeatureLogger : MonoBehaviour
         }
     }
 
+    private void InitializeGoal()
+    {
+        startRobotPosition = robotBaseLink.position;
+
+        if (useGoalAheadOfRobot)
+        {
+            Vector3 forward = robotBaseLink.forward;
+            forward.y = 0f;
+
+            if (forward.sqrMagnitude < 0.0001f)
+            {
+                forward = Vector3.forward;
+            }
+
+            forward.Normalize();
+
+            goalPosition = startRobotPosition + forward * goalDistanceAhead;
+            goalPosition.y = startRobotPosition.y;
+        }
+        else if (goalTransform != null)
+        {
+            goalPosition = goalTransform.position;
+        }
+        else
+        {
+            goalPosition = fallbackGoalPosition;
+        }
+
+        goalInitialized = true;
+
+        Debug.Log("MetaActionFeatureLogger goal position: " + goalPosition);
+    }
+
     private void FindPedestrians()
     {
         pedestrians.Clear();
 
-        // Most pedestrian agents inherit from SEAN.Scenario.Agents.Base.
         SEAN.Scenario.Agents.Base[] agents = GameObject.FindObjectsOfType<SEAN.Scenario.Agents.Base>();
 
         foreach (SEAN.Scenario.Agents.Base agent in agents)
@@ -112,7 +159,6 @@ public class MetaActionFeatureLogger : MonoBehaviour
             }
         }
 
-        // Optional fallback: if you use tags later.
         if (!string.IsNullOrEmpty(pedestrianTag))
         {
             GameObject[] taggedObjects = GameObject.FindGameObjectsWithTag(pedestrianTag);
@@ -129,12 +175,27 @@ public class MetaActionFeatureLogger : MonoBehaviour
     private void LogFrame()
     {
         Vector3 robotPos = robotBaseLink.position;
-        Vector3 goalPos = goalTransform != null ? goalTransform.position : fallbackGoalPosition;
+        Vector3 goalPos = goalPosition;
 
         float distToGoal = Vector3.Distance(
             new Vector3(robotPos.x, 0f, robotPos.z),
             new Vector3(goalPos.x, 0f, goalPos.z)
         );
+
+        Vector3 goalDirection = goalPos - startRobotPosition;
+        goalDirection.y = 0f;
+
+        float progressAlongGoalDirection = 0f;
+
+        if (goalDirection.sqrMagnitude > 0.0001f)
+        {
+            goalDirection.Normalize();
+
+            Vector3 displacement = robotPos - startRobotPosition;
+            displacement.y = 0f;
+
+            progressAlongGoalDirection = Vector3.Dot(displacement, goalDirection);
+        }
 
         float currentMinDist = float.PositiveInfinity;
 
@@ -146,6 +207,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
             }
 
             Vector3 pedPos = ped.position;
+
             float dist = Vector3.Distance(
                 new Vector3(robotPos.x, 0f, robotPos.z),
                 new Vector3(pedPos.x, 0f, pedPos.z)
@@ -173,6 +235,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
             {
                 collisionCount += 1;
             }
+
             currentlyInCollision = collisionNow;
         }
 
@@ -188,6 +251,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
             goalPos.y.ToString("F4") + "," +
             goalPos.z.ToString("F4") + "," +
             distToGoal.ToString("F4") + "," +
+            progressAlongGoalDirection.ToString("F4") + "," +
             SafeFloat(minDistanceToPedestrian) + "," +
             currentMinDist.ToString("F4") + "," +
             collisionCount + "," +
@@ -205,6 +269,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
         for (int i = 0; i < pedestrians.Count; i++)
         {
             Transform ped = pedestrians[i];
+
             if (ped == null || !ped.gameObject.activeInHierarchy)
             {
                 continue;
@@ -258,4 +323,5 @@ public class MetaActionFeatureLogger : MonoBehaviour
         }
     }
 }
+
 
