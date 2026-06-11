@@ -1,0 +1,7 @@
+run_id,scenario,robot_meta_action,parameter_setting,num_rows,min_distance_to_pedestrians,mean_pedestrian_deviation_from_default,max_pedestrian_deviation_from_default,progress_along_goal_ahead_direction,collision_count,trajectory_file
+default,CrossPath,fixed_meta_action,default,301,0.4810,0.0000,0.0000,26.2281,0,trajectories/meta_features_default_goal_head_20260601_110403.csv
+weak_robot_repulsion,CrossPath,fixed_meta_action,weak_robot_repulsion,299,0.6210,2.9630,12.1137,26.8269,0,trajectories/meta_features_weak_goal_head_20260601_110629.csv
+strong_robot_repulsion,CrossPath,fixed_meta_action,strong_robot_repulsion,377,0.6962,2.6020,6.6350,31.7501,0,trajectories/meta_features_Strong_goal_head_20260601_110803.csv
+faster_pedestrians,CrossPath,fixed_meta_action,faster_pedestrians,344,10.3918,5.9551,17.6634,29.7774,0,trajectories/meta_features_Faster_goalhead_20260608_143543.csv
+stronger_social_force_A,CrossPath,fixed_meta_action,stronger_social_force_A,739,11.0698,3.2855,8.6977,19.4835,0,trajectories/meta_features_Stronger_A_gh_20260608_143726.csv
+larger_social_force_B,CrossPath,fixed_meta_action,larger_social_force_B,323,0.3600,3.2185,8.4648,30.4453,0,trajectories/meta_features_Larger_B_gh_20260608_143939.csv

@@ -1,0 +1,7 @@
+run_id,scenario,robot_meta_action,parameter_setting,DESIRED_SPEED,MAX_VEL,A,B,T,LATERAL_DAMPENING,ROBOT_REPULSION_DAMPENING_MIN,ROBOT_REPULSION_DAMPENING_MAX,parameter_source,trajectory_file
+default,CrossPath,fixed_meta_action,default,0.6,0.6,500,0.16,0.5,5,0.5,1.0,confirmed_current_code,trajectories/meta_features_default_goal_head_20260601_110403.csv
+weak_robot_repulsion,CrossPath,fixed_meta_action,weak_robot_repulsion,0.6,0.6,500,0.16,0.5,5,0.1,0.3,manual_run_record,trajectories/meta_features_weak_goal_head_20260601_110629.csv
+strong_robot_repulsion,CrossPath,fixed_meta_action,strong_robot_repulsion,0.6,0.6,500,0.16,0.5,5,2.0,3.0,manual_run_record,trajectories/meta_features_Strong_goal_head_20260601_110803.csv
+faster_pedestrians,CrossPath,fixed_meta_action,faster_pedestrians,0.9,0.9,500,0.16,0.5,5,0.5,1.0,confirmed_current_run_setup,trajectories/meta_features_Faster_goalhead_20260608_143543.csv
+stronger_social_force_A,CrossPath,fixed_meta_action,stronger_social_force_A,0.6,0.6,2000,0.16,0.5,5,0.5,1.0,confirmed_current_run_setup,trajectories/meta_features_Stronger_A_gh_20260608_143726.csv
+larger_social_force_B,CrossPath,fixed_meta_action,larger_social_force_B,0.6,0.6,500,0.32,0.5,5,0.5,1.0,confirmed_current_run_setup,trajectories/meta_features_Larger_B_gh_20260608_143939.csv
