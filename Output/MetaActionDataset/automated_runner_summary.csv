@@ -1,0 +1,7 @@
+run_label,num_rows,min_distance_to_pedestrians,final_progress,collision_count,source_file
+auto_default,111,6.1317,35.4979,0,meta_features_auto_default_20260615_144153.csv
+auto_weak_robot_repulsion,112,1.5858,33.9529,0,meta_features_auto_default_20260615_144153.csv
+auto_strong_robot_repulsion,112,1.5910,32.4064,0,meta_features_auto_default_20260615_144153.csv
+auto_faster_pedestrians,112,3.2624,30.8615,0,meta_features_auto_default_20260615_144153.csv
+auto_stronger_social_force_A,112,7.7687,29.3150,0,meta_features_auto_default_20260615_144153.csv
+auto_larger_social_force_B,303,1.2804,27.7685,0,meta_features_auto_default_20260615_144153.csv
