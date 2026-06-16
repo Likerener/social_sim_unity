@@ -1,3 +1,5 @@
+
+
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
@@ -8,7 +10,7 @@ public class MetaActionDatasetRunner : MonoBehaviour
     [System.Serializable]
     public class RunConfig
     {
-        public string runId;
+        public string parameterId;
         public MetaActionController.MetaAction action;
 
         public float desiredSpeed;
@@ -26,35 +28,46 @@ public class MetaActionDatasetRunner : MonoBehaviour
     public float runDurationSeconds = 20.0f;
     public float delayBetweenRunsSeconds = 2.0f;
 
+    [Header("Scenario Settings")]
+    public string[] scenarioTaskNames = new string[]
+    {
+        "Random",
+        "JoinGroup",
+        "LeaveGroup"
+    };
+
     [Header("Scene References")]
     public MetaActionController metaActionController;
     public MetaActionFeatureLogger featureLogger;
 
-    private List<RunConfig> configs = new List<RunConfig>();
+    private SEAN.SEAN sean;
+    private List<RunConfig> parameterConfigs = new List<RunConfig>();
 
     private void Start()
     {
-        BuildDefaultConfigs();
+        sean = SEAN.SEAN.instance;
+        BuildParameterConfigs();
 
         if (runOnStart)
         {
-            StartCoroutine(RunAllConfigs());
+            StartCoroutine(RunAllScenariosAndConfigs());
         }
     }
 
     public void StartDatasetRun()
     {
-        BuildDefaultConfigs();
-        StartCoroutine(RunAllConfigs());
+        sean = SEAN.SEAN.instance;
+        BuildParameterConfigs();
+        StartCoroutine(RunAllScenariosAndConfigs());
     }
 
-    private void BuildDefaultConfigs()
+    private void BuildParameterConfigs()
     {
-        configs.Clear();
+        parameterConfigs.Clear();
 
-        configs.Add(new RunConfig
+        parameterConfigs.Add(new RunConfig
         {
-            runId = "auto_default",
+            parameterId = "default",
             action = MetaActionController.MetaAction.Straight,
             desiredSpeed = 0.6f,
             maxVel = 0.6f,
@@ -66,9 +79,9 @@ public class MetaActionDatasetRunner : MonoBehaviour
             robotRepulsionMax = 1.0f
         });
 
-        configs.Add(new RunConfig
+        parameterConfigs.Add(new RunConfig
         {
-            runId = "auto_weak_robot_repulsion",
+            parameterId = "weak_robot_repulsion",
             action = MetaActionController.MetaAction.Straight,
             desiredSpeed = 0.6f,
             maxVel = 0.6f,
@@ -80,9 +93,9 @@ public class MetaActionDatasetRunner : MonoBehaviour
             robotRepulsionMax = 0.3f
         });
 
-        configs.Add(new RunConfig
+        parameterConfigs.Add(new RunConfig
         {
-            runId = "auto_strong_robot_repulsion",
+            parameterId = "strong_robot_repulsion",
             action = MetaActionController.MetaAction.Straight,
             desiredSpeed = 0.6f,
             maxVel = 0.6f,
@@ -94,9 +107,9 @@ public class MetaActionDatasetRunner : MonoBehaviour
             robotRepulsionMax = 3.0f
         });
 
-        configs.Add(new RunConfig
+        parameterConfigs.Add(new RunConfig
         {
-            runId = "auto_faster_pedestrians",
+            parameterId = "faster_pedestrians",
             action = MetaActionController.MetaAction.Straight,
             desiredSpeed = 0.9f,
             maxVel = 0.9f,
@@ -108,9 +121,9 @@ public class MetaActionDatasetRunner : MonoBehaviour
             robotRepulsionMax = 1.0f
         });
 
-        configs.Add(new RunConfig
+        parameterConfigs.Add(new RunConfig
         {
-            runId = "auto_stronger_social_force_A",
+            parameterId = "stronger_social_force_A",
             action = MetaActionController.MetaAction.Straight,
             desiredSpeed = 0.6f,
             maxVel = 0.6f,
@@ -122,9 +135,9 @@ public class MetaActionDatasetRunner : MonoBehaviour
             robotRepulsionMax = 1.0f
         });
 
-        configs.Add(new RunConfig
+        parameterConfigs.Add(new RunConfig
         {
-            runId = "auto_larger_social_force_B",
+            parameterId = "larger_social_force_B",
             action = MetaActionController.MetaAction.Straight,
             desiredSpeed = 0.6f,
             maxVel = 0.6f,
@@ -137,51 +150,140 @@ public class MetaActionDatasetRunner : MonoBehaviour
         });
     }
 
-    private IEnumerator RunAllConfigs()
+    private IEnumerator RunAllScenariosAndConfigs()
     {
-        Debug.Log("[MetaActionDatasetRunner] Starting automated dataset run.");
+        Debug.Log("[MetaActionDatasetRunner] Starting automated multi-scenario dataset run.");
 
-        for (int i = 0; i < configs.Count; i++)
+        for (int scenarioIndex = 0; scenarioIndex < scenarioTaskNames.Length; scenarioIndex++)
         {
-            RunConfig config = configs[i];
+            string scenarioName = scenarioTaskNames[scenarioIndex];
 
-            Debug.Log("[MetaActionDatasetRunner] Starting run: " + config.runId);
+            Debug.Log("[MetaActionDatasetRunner] Switching scenario/task to: " + scenarioName);
 
-            ApplyConfig(config);
+            bool taskSet = SetScenarioTask(scenarioName);
 
-            if (featureLogger != null)
+            if (!taskSet)
             {
-                featureLogger.runLabel = config.runId;
-            }
-            else
-            {
-                Debug.LogWarning("[MetaActionDatasetRunner] Feature logger is not assigned.");
-            }
-
-            if (metaActionController != null)
-            {
-                metaActionController.currentAction = config.action;
-            }
-            else
-            {
-                Debug.LogWarning("[MetaActionDatasetRunner] Meta action controller is not assigned.");
-            }
-
-            yield return new WaitForSeconds(runDurationSeconds);
-
-            Debug.Log("[MetaActionDatasetRunner] Finished run: " + config.runId);
-
-            if (metaActionController != null)
-            {
-                metaActionController.currentAction = MetaActionController.MetaAction.Stop;
+                Debug.LogError("[MetaActionDatasetRunner] Failed to set scenario/task: " + scenarioName);
+                continue;
             }
 
             yield return new WaitForSeconds(delayBetweenRunsSeconds);
+
+            for (int configIndex = 0; configIndex < parameterConfigs.Count; configIndex++)
+            {
+                RunConfig config = parameterConfigs[configIndex];
+
+                string runLabel = "auto_" + scenarioName + "_" + config.parameterId;
+
+                Debug.Log("[MetaActionDatasetRunner] Starting run: " + runLabel);
+
+                ApplyConfig(config);
+
+                if (featureLogger != null)
+                {
+                    featureLogger.runLabel = runLabel;
+                }
+                else
+                {
+                    Debug.LogWarning("[MetaActionDatasetRunner] Feature logger is not assigned.");
+                }
+
+                if (metaActionController != null)
+                {
+                    metaActionController.currentAction = config.action;
+                }
+                else
+                {
+                    Debug.LogWarning("[MetaActionDatasetRunner] Meta action controller is not assigned.");
+                }
+
+                StartCurrentTaskSafely(runLabel);
+
+                yield return new WaitForSeconds(runDurationSeconds);
+
+                Debug.Log("[MetaActionDatasetRunner] Finished run: " + runLabel);
+
+                if (metaActionController != null)
+                {
+                    metaActionController.currentAction = MetaActionController.MetaAction.Stop;
+                }
+
+                yield return new WaitForSeconds(delayBetweenRunsSeconds);
+            }
         }
 
         Parameters.ResetToDefault();
 
-        Debug.Log("[MetaActionDatasetRunner] Finished all automated dataset runs.");
+        if (metaActionController != null)
+        {
+            metaActionController.currentAction = MetaActionController.MetaAction.Stop;
+        }
+
+        Debug.Log("[MetaActionDatasetRunner] Finished all automated multi-scenario dataset runs.");
+    }
+
+    private bool SetScenarioTask(string taskName)
+    {
+        if (sean == null)
+        {
+            sean = SEAN.SEAN.instance;
+        }
+
+        if (sean == null)
+        {
+            Debug.LogError("[MetaActionDatasetRunner] Could not find SEAN instance.");
+            return false;
+        }
+
+        try
+        {
+            sean.SetTask(taskName);
+
+            if (sean.robotTask == null)
+            {
+                Debug.LogError("[MetaActionDatasetRunner] Task was set, but sean.robotTask is null: " + taskName);
+                return false;
+            }
+
+            Debug.Log("[MetaActionDatasetRunner] Active robot task is now: " + sean.robotTask.name);
+            return true;
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError("[MetaActionDatasetRunner] Error setting task " + taskName + ": " + e.Message);
+            return false;
+        }
+    }
+
+    private void StartCurrentTaskSafely(string runLabel)
+    {
+        if (sean == null)
+        {
+            sean = SEAN.SEAN.instance;
+        }
+
+        if (sean == null)
+        {
+            Debug.LogWarning("[MetaActionDatasetRunner] Cannot start task for " + runLabel + " because SEAN instance is null.");
+            return;
+        }
+
+        if (sean.robotTask == null)
+        {
+            Debug.LogWarning("[MetaActionDatasetRunner] Cannot start task for " + runLabel + " because robotTask is null.");
+            return;
+        }
+
+        try
+        {
+            sean.robotTask.StartNewTask();
+            Debug.Log("[MetaActionDatasetRunner] Started task for run: " + runLabel);
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogWarning("[MetaActionDatasetRunner] Could not start task for run " + runLabel + ": " + e.Message);
+        }
     }
 
     private void ApplyConfig(RunConfig config)
@@ -196,7 +298,7 @@ public class MetaActionDatasetRunner : MonoBehaviour
         Parameters.ROBOT_REPULSION_DAMPENING_MAX = config.robotRepulsionMax;
 
         Debug.Log(
-            "[MetaActionDatasetRunner] Applied config " + config.runId +
+            "[MetaActionDatasetRunner] Applied config " + config.parameterId +
             " | DESIRED_SPEED=" + Parameters.DESIRED_SPEED +
             " | MAX_VEL=" + Parameters.MAX_VEL +
             " | A=" + Parameters.A +

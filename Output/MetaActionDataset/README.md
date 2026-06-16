@@ -128,3 +128,67 @@ Current limitation: the final run logs extra rows because the logger continues r
 
 
 
+\## Multi-Scenario Automated Runner
+
+
+
+A multi-scenario automated runner has been tested. It runs three robot-task scenarios:
+
+
+
+\- BusyABNav
+
+\- JoinGroup
+
+\- LeaveGroup
+
+
+
+For each scenario, it runs six social-force parameter settings:
+
+
+
+\- default
+
+\- weak\_robot\_repulsion
+
+\- strong\_robot\_repulsion
+
+\- faster\_pedestrians
+
+\- stronger\_social\_force\_A
+
+\- larger\_social\_force\_B
+
+
+
+This produces 18 automated outcomes in total.
+
+
+
+The generated multi-scenario trajectory/features log is saved at:
+
+
+
+`trajectories/meta\_features\_multi\_scenario\_auto\_20260616\_144400.csv`
+
+
+
+The extracted multi-scenario feature summary is saved at:
+
+
+
+`multi\_scenario\_automated\_runner\_summary.csv`
+
+
+
+Notes:
+
+\- The initial `TestAuto` rows in the trajectory file can be ignored because they were logged before the automated runner updated the run label.
+
+\- The final run currently has extra rows because the logger continues recording after the runner finishes. This can be cleaned up later by disabling the logger or stopping Play mode automatically at the end.
+
+
+
+
+
