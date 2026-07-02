@@ -8,65 +8,76 @@ public class MetaActionFeatureLogger : MonoBehaviour
 {
     [Header("Logging")]
     public bool enableLogging = true;
+
+    // Keep this true for old/manual experiments.
+    // Set it to false when using the rollout runner.
+    public bool autoStartLogging = true;
+
     public string runLabel = "default";
     public float logInterval = 0.1f;
+
+    [Header("Rollout Metadata")]
+    public string scenarioId = "manual_scenario";
+    public string metaActionName = "Straight";
+    public int rolloutId = 0;
+    public int rolloutSeed = 0;
 
     [Header("Goal / Progress")]
     public bool useGoalAheadOfRobot = true;
     public float goalDistanceAhead = 20.0f;
     public Transform goalTransform;
-    public Vector3 fallbackGoalPosition = new Vector3(3.82f, 0.5f, -22.65f);
+    public Vector3 fallbackGoalPosition =
+        new Vector3(3.82f, 0.5f, -22.65f);
 
     [Header("Pedestrian Detection")]
     public string pedestrianTag = "";
     public float collisionDistanceThreshold = 0.35f;
 
     private Transform robotBaseLink;
-    private List<Transform> pedestrians = new List<Transform>();
+    private readonly List<Transform> pedestrians =
+        new List<Transform>();
 
-    private float nextLogTime = 0f;
-    private float minDistanceToPedestrian = float.PositiveInfinity;
-    private int collisionCount = 0;
-    private bool currentlyInCollision = false;
+    private float nextLogTime;
+    private float rolloutStartTime;
+
+    private float minDistanceToPedestrian =
+        float.PositiveInfinity;
+
+    private int collisionCount;
+    private bool currentlyInCollision;
 
     private Vector3 startRobotPosition;
     private Vector3 goalPosition;
-    private bool goalInitialized = false;
+    private bool goalInitialized;
+
+    // Path smoothness is represented as cumulative absolute
+    // change in robot heading, measured in radians.
+    // Lower values indicate a smoother trajectory.
+    private bool previousHeadingInitialized;
+    private float previousHeadingDegrees;
+    private float cumulativeHeadingChangeRadians;
 
     private string outputPath;
     private StreamWriter writer;
 
-    void Start()
+    private void Start()
     {
-        if (!enableLogging)
-        {
-            return;
-        }
-
         TryFindRobotBaseLink();
         FindPedestrians();
 
-        if (robotBaseLink != null)
+        if (autoStartLogging && enableLogging)
         {
-            InitializeGoal();
+            BeginRollout(
+                scenarioId,
+                metaActionName,
+                rolloutId,
+                rolloutSeed,
+                runLabel
+            );
         }
-
-        string folder = Path.Combine(Application.dataPath, "../Output/MetaActionFeatures");
-        Directory.CreateDirectory(folder);
-
-        string timestamp = DateTime.Now.ToString("yyyyMMdd_HHmmss");
-        outputPath = Path.Combine(folder, "meta_features_" + runLabel + "_" + timestamp + ".csv");
-
-        writer = new StreamWriter(outputPath, false, Encoding.UTF8);
-
-        writer.WriteLine(
-            "time,run_label,robot_x,robot_y,robot_z,goal_x,goal_y,goal_z,dist_to_goal,progress_along_goal_direction,min_dist_to_ped_so_far,current_min_dist_to_ped,collision_count,num_pedestrians,pedestrian_positions"
-        );
-
-        Debug.Log("MetaActionFeatureLogger writing to: " + outputPath);
     }
 
-    void Update()
+    private void Update()
     {
         if (!enableLogging || writer == null)
         {
@@ -76,6 +87,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
         if (robotBaseLink == null)
         {
             TryFindRobotBaseLink();
+
             if (robotBaseLink == null)
             {
                 return;
@@ -102,18 +114,153 @@ public class MetaActionFeatureLogger : MonoBehaviour
         LogFrame();
     }
 
+    public void BeginRollout(
+        string newScenarioId,
+        string newMetaActionName,
+        int newRolloutId,
+        int newRolloutSeed,
+        string newRunLabel
+    )
+    {
+        CloseWriter();
+
+        enableLogging = true;
+
+        scenarioId = newScenarioId;
+        metaActionName = newMetaActionName;
+        rolloutId = newRolloutId;
+        rolloutSeed = newRolloutSeed;
+        runLabel = newRunLabel;
+
+        ResetRolloutState();
+
+        TryFindRobotBaseLink();
+        FindPedestrians();
+
+        if (robotBaseLink != null)
+        {
+            InitializeGoal();
+        }
+
+        string folder = Path.Combine(
+            Application.dataPath,
+            "../Output/MetaActionFeatures"
+        );
+
+        Directory.CreateDirectory(folder);
+
+        string timestamp =
+            DateTime.Now.ToString("yyyyMMdd_HHmmss_fff");
+
+        string safeScenario = SanitizeFileName(scenarioId);
+        string safeAction = SanitizeFileName(metaActionName);
+        string safeLabel = SanitizeFileName(runLabel);
+
+        string fileName =
+            "meta_features_" +
+            safeScenario + "_" +
+            safeAction + "_" +
+            "rollout" + rolloutId + "_" +
+            "seed" + rolloutSeed + "_" +
+            safeLabel + "_" +
+            timestamp +
+            ".csv";
+
+        outputPath = Path.Combine(folder, fileName);
+
+        writer = new StreamWriter(
+            outputPath,
+            false,
+            Encoding.UTF8
+        );
+
+        writer.WriteLine(
+            "time," +
+            "elapsed_time," +
+            "run_label," +
+            "scenario_id," +
+            "meta_action," +
+            "rollout_id," +
+            "rollout_seed," +
+            "robot_x," +
+            "robot_y," +
+            "robot_z," +
+            "goal_x," +
+            "goal_y," +
+            "goal_z," +
+            "dist_to_goal," +
+            "progress_along_goal_direction," +
+            "path_smoothness," +
+            "min_dist_to_ped_so_far," +
+            "current_min_dist_to_ped," +
+            "collision_count," +
+            "num_pedestrians," +
+            "pedestrian_positions"
+        );
+
+        writer.Flush();
+
+        Debug.Log(
+            "[MetaActionFeatureLogger] Begin rollout: " +
+            outputPath
+        );
+    }
+
+    public void EndRollout()
+    {
+        CloseWriter();
+
+        enableLogging = false;
+
+        Debug.Log(
+            "[MetaActionFeatureLogger] End rollout: " +
+            runLabel
+        );
+    }
+
+    public string GetCurrentOutputPath()
+    {
+        return outputPath;
+    }
+
+    private void ResetRolloutState()
+    {
+        nextLogTime = Time.time;
+        rolloutStartTime = Time.time;
+
+        minDistanceToPedestrian =
+            float.PositiveInfinity;
+
+        collisionCount = 0;
+        currentlyInCollision = false;
+
+        goalInitialized = false;
+
+        previousHeadingInitialized = false;
+        previousHeadingDegrees = 0f;
+        cumulativeHeadingChangeRadians = 0f;
+
+        pedestrians.Clear();
+    }
+
     private void TryFindRobotBaseLink()
     {
         if (SEAN.SEAN.instance != null &&
             SEAN.SEAN.instance.robot != null &&
             SEAN.SEAN.instance.robot.base_link != null)
         {
-            robotBaseLink = SEAN.SEAN.instance.robot.base_link.transform;
+            robotBaseLink =
+                SEAN.SEAN.instance.robot.base_link.transform;
         }
     }
 
     private void InitializeGoal()
     {
+        if (robotBaseLink == null)
+        {
+            return;
+        }
+
         startRobotPosition = robotBaseLink.position;
 
         if (useGoalAheadOfRobot)
@@ -128,7 +275,10 @@ public class MetaActionFeatureLogger : MonoBehaviour
 
             forward.Normalize();
 
-            goalPosition = startRobotPosition + forward * goalDistanceAhead;
+            goalPosition =
+                startRobotPosition +
+                forward * goalDistanceAhead;
+
             goalPosition.y = startRobotPosition.y;
         }
         else if (goalTransform != null)
@@ -142,18 +292,45 @@ public class MetaActionFeatureLogger : MonoBehaviour
 
         goalInitialized = true;
 
-        Debug.Log("MetaActionFeatureLogger goal position: " + goalPosition);
+        InitializeHeading();
+
+        Debug.Log(
+            "[MetaActionFeatureLogger] Goal position: " +
+            goalPosition
+        );
+    }
+
+    private void InitializeHeading()
+    {
+        if (robotBaseLink == null)
+        {
+            previousHeadingInitialized = false;
+            return;
+        }
+
+        previousHeadingDegrees =
+            robotBaseLink.eulerAngles.y;
+
+        previousHeadingInitialized = true;
     }
 
     private void FindPedestrians()
     {
         pedestrians.Clear();
 
-        SEAN.Scenario.Agents.Base[] agents = GameObject.FindObjectsOfType<SEAN.Scenario.Agents.Base>();
+        SEAN.Scenario.Agents.Base[] agents =
+            GameObject.FindObjectsOfType<
+                SEAN.Scenario.Agents.Base
+            >();
 
-        foreach (SEAN.Scenario.Agents.Base agent in agents)
+        foreach (
+            SEAN.Scenario.Agents.Base agent in agents
+        )
         {
-            if (agent != null && agent.gameObject.activeInHierarchy)
+            if (
+                agent != null &&
+                agent.gameObject.activeInHierarchy
+            )
             {
                 pedestrians.Add(agent.transform);
             }
@@ -161,10 +338,18 @@ public class MetaActionFeatureLogger : MonoBehaviour
 
         if (!string.IsNullOrEmpty(pedestrianTag))
         {
-            GameObject[] taggedObjects = GameObject.FindGameObjectsWithTag(pedestrianTag);
+            GameObject[] taggedObjects =
+                GameObject.FindGameObjectsWithTag(
+                    pedestrianTag
+                );
+
             foreach (GameObject obj in taggedObjects)
             {
-                if (obj != null && obj.activeInHierarchy && !pedestrians.Contains(obj.transform))
+                if (
+                    obj != null &&
+                    obj.activeInHierarchy &&
+                    !pedestrians.Contains(obj.transform)
+                )
                 {
                     pedestrians.Add(obj.transform);
                 }
@@ -177,12 +362,25 @@ public class MetaActionFeatureLogger : MonoBehaviour
         Vector3 robotPos = robotBaseLink.position;
         Vector3 goalPos = goalPosition;
 
+        float elapsedTime =
+            Time.time - rolloutStartTime;
+
         float distToGoal = Vector3.Distance(
-            new Vector3(robotPos.x, 0f, robotPos.z),
-            new Vector3(goalPos.x, 0f, goalPos.z)
+            new Vector3(
+                robotPos.x,
+                0f,
+                robotPos.z
+            ),
+            new Vector3(
+                goalPos.x,
+                0f,
+                goalPos.z
+            )
         );
 
-        Vector3 goalDirection = goalPos - startRobotPosition;
+        Vector3 goalDirection =
+            goalPos - startRobotPosition;
+
         goalDirection.y = 0f;
 
         float progressAlongGoalDirection = 0f;
@@ -191,17 +389,29 @@ public class MetaActionFeatureLogger : MonoBehaviour
         {
             goalDirection.Normalize();
 
-            Vector3 displacement = robotPos - startRobotPosition;
+            Vector3 displacement =
+                robotPos - startRobotPosition;
+
             displacement.y = 0f;
 
-            progressAlongGoalDirection = Vector3.Dot(displacement, goalDirection);
+            progressAlongGoalDirection =
+                Vector3.Dot(
+                    displacement,
+                    goalDirection
+                );
         }
 
-        float currentMinDist = float.PositiveInfinity;
+        UpdatePathSmoothness();
+
+        float currentMinDist =
+            float.PositiveInfinity;
 
         foreach (Transform ped in pedestrians)
         {
-            if (ped == null || !ped.gameObject.activeInHierarchy)
+            if (
+                ped == null ||
+                !ped.gameObject.activeInHierarchy
+            )
             {
                 continue;
             }
@@ -209,8 +419,16 @@ public class MetaActionFeatureLogger : MonoBehaviour
             Vector3 pedPos = ped.position;
 
             float dist = Vector3.Distance(
-                new Vector3(robotPos.x, 0f, robotPos.z),
-                new Vector3(pedPos.x, 0f, pedPos.z)
+                new Vector3(
+                    robotPos.x,
+                    0f,
+                    robotPos.z
+                ),
+                new Vector3(
+                    pedPos.x,
+                    0f,
+                    pedPos.z
+                )
             );
 
             if (dist < currentMinDist)
@@ -225,25 +443,42 @@ public class MetaActionFeatureLogger : MonoBehaviour
         }
         else
         {
-            if (currentMinDist < minDistanceToPedestrian)
+            if (
+                currentMinDist <
+                minDistanceToPedestrian
+            )
             {
-                minDistanceToPedestrian = currentMinDist;
+                minDistanceToPedestrian =
+                    currentMinDist;
             }
 
-            bool collisionNow = currentMinDist <= collisionDistanceThreshold;
-            if (collisionNow && !currentlyInCollision)
+            bool collisionNow =
+                currentMinDist <=
+                collisionDistanceThreshold;
+
+            if (
+                collisionNow &&
+                !currentlyInCollision
+            )
             {
                 collisionCount += 1;
             }
 
-            currentlyInCollision = collisionNow;
+            currentlyInCollision =
+                collisionNow;
         }
 
-        string pedPositions = BuildPedestrianPositionString();
+        string pedPositions =
+            BuildPedestrianPositionString();
 
         writer.WriteLine(
             Time.time.ToString("F3") + "," +
+            elapsedTime.ToString("F3") + "," +
             Escape(runLabel) + "," +
+            Escape(scenarioId) + "," +
+            Escape(metaActionName) + "," +
+            rolloutId + "," +
+            rolloutSeed + "," +
             robotPos.x.ToString("F4") + "," +
             robotPos.y.ToString("F4") + "," +
             robotPos.z.ToString("F4") + "," +
@@ -252,6 +487,7 @@ public class MetaActionFeatureLogger : MonoBehaviour
             goalPos.z.ToString("F4") + "," +
             distToGoal.ToString("F4") + "," +
             progressAlongGoalDirection.ToString("F4") + "," +
+            cumulativeHeadingChangeRadians.ToString("F4") + "," +
             SafeFloat(minDistanceToPedestrian) + "," +
             currentMinDist.ToString("F4") + "," +
             collisionCount + "," +
@@ -262,21 +498,70 @@ public class MetaActionFeatureLogger : MonoBehaviour
         writer.Flush();
     }
 
+    private void UpdatePathSmoothness()
+    {
+        if (robotBaseLink == null)
+        {
+            return;
+        }
+
+        float currentHeadingDegrees =
+            robotBaseLink.eulerAngles.y;
+
+        if (!previousHeadingInitialized)
+        {
+            previousHeadingDegrees =
+                currentHeadingDegrees;
+
+            previousHeadingInitialized = true;
+            return;
+        }
+
+        float headingChangeDegrees =
+            Mathf.Abs(
+                Mathf.DeltaAngle(
+                    previousHeadingDegrees,
+                    currentHeadingDegrees
+                )
+            );
+
+        cumulativeHeadingChangeRadians +=
+            headingChangeDegrees *
+            Mathf.Deg2Rad;
+
+        previousHeadingDegrees =
+            currentHeadingDegrees;
+    }
+
     private string BuildPedestrianPositionString()
     {
-        List<string> parts = new List<string>();
+        List<string> parts =
+            new List<string>();
 
-        for (int i = 0; i < pedestrians.Count; i++)
+        for (
+            int i = 0;
+            i < pedestrians.Count;
+            i++
+        )
         {
             Transform ped = pedestrians[i];
 
-            if (ped == null || !ped.gameObject.activeInHierarchy)
+            if (
+                ped == null ||
+                !ped.gameObject.activeInHierarchy
+            )
             {
                 continue;
             }
 
             Vector3 p = ped.position;
-            parts.Add(i + ":" + p.x.ToString("F3") + "|" + p.y.ToString("F3") + "|" + p.z.ToString("F3"));
+
+            parts.Add(
+                i + ":" +
+                p.x.ToString("F3") + "|" +
+                p.y.ToString("F3") + "|" +
+                p.z.ToString("F3")
+            );
         }
 
         return string.Join(";", parts);
@@ -284,7 +569,10 @@ public class MetaActionFeatureLogger : MonoBehaviour
 
     private string SafeFloat(float value)
     {
-        if (float.IsInfinity(value) || float.IsNaN(value))
+        if (
+            float.IsInfinity(value) ||
+            float.IsNaN(value)
+        )
         {
             return "-1";
         }
@@ -299,15 +587,39 @@ public class MetaActionFeatureLogger : MonoBehaviour
             return "";
         }
 
-        return "\"" + value.Replace("\"", "\"\"") + "\"";
+        return "\"" +
+               value.Replace("\"", "\"\"") +
+               "\"";
     }
 
-    void OnApplicationQuit()
+    private string SanitizeFileName(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return "unknown";
+        }
+
+        foreach (
+            char invalidChar in
+            Path.GetInvalidFileNameChars()
+        )
+        {
+            value =
+                value.Replace(
+                    invalidChar,
+                    '_'
+                );
+        }
+
+        return value.Replace(" ", "_");
+    }
+
+    private void OnApplicationQuit()
     {
         CloseWriter();
     }
 
-    void OnDisable()
+    private void OnDisable()
     {
         CloseWriter();
     }
@@ -319,9 +631,12 @@ public class MetaActionFeatureLogger : MonoBehaviour
             writer.Flush();
             writer.Close();
             writer = null;
-            Debug.Log("MetaActionFeatureLogger saved: " + outputPath);
+
+            Debug.Log(
+                "[MetaActionFeatureLogger] Saved: " +
+                outputPath
+            );
         }
     }
 }
-
 
