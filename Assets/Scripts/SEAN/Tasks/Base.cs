@@ -209,6 +209,33 @@ namespace SEAN.Tasks
             ros.Send(Topic, nextGoal);
         }
 
+        public void RepublishCurrentGoal()
+        {
+            if (!PublishGoal)
+            {
+                return;
+            }
+
+            if (interactiveGoal == null)
+            {
+                Debug.LogError(
+                    "[SEAN.Tasks.Base] Cannot republish goal: interactiveGoal is null."
+                );
+                return;
+            }
+
+            Publish(interactiveGoal);
+
+            Debug.Log(
+                "[SEAN.Tasks.Base] Republished current goal: " +
+                interactiveGoal.transform.position
+            );
+        }
+
+
+
+
+
         private void initStartAndGoal()
         {
             robotStart = sean.GetStartOrGoal(Scenario.Agents.ControlledAgent.Robot, true);
